@@ -17,6 +17,7 @@
     </div>
 
     <div class="d-flex flex-row">
+      <div class="day" v-if="!big"></div>
       <div class="day" :class="{ colBase: big }" v-for="day of weekdayHeader" :key="day">
         <div>{{ day }}</div>
       </div>
@@ -35,7 +36,15 @@
           }"
         >
           <div class="fw-bold">{{ index == 0 ? day.weekNumber : "" }}</div>
-          <div>{{ day.day }}</div>
+          <div>
+            {{ day.day }}
+            {{
+              events
+                .filter((e) => day.startOf("day").equals(DateTime.fromFormat(e.start.split("T")[0], "yyyy-LL-dd").startOf("day")))
+                .map((e) => e.name)
+                .join(", ")
+            }}
+          </div>
         </div>
       </div>
     </template>
@@ -72,12 +81,21 @@ import { DateTime } from "luxon";
 
 import { defineProps, toRefs, defineEmits, computed } from "vue";
 
+type Event = {
+  start: string;
+  end: string;
+  name: string;
+  id: number;
+  color: string;
+};
+
 const props = defineProps<{
   month: DateTime;
   controllable?: boolean;
   big?: boolean;
+  events: Event[];
 }>();
-const { month, big, controllable } = toRefs(props);
+const { events, month, big, controllable } = toRefs(props);
 
 const emit = defineEmits(["previous", "next"]);
 

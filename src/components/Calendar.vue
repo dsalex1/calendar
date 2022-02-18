@@ -35,8 +35,16 @@
           controllable
           @previous="currentDay = currentDay.plus({ month: -1 })"
           @next="currentDay = currentDay.plus({ month: 1 })"
+          :events="getEventsForMonth(currentMonth)"
         >
         </MonthView>
+        <div class="m-2">
+          <input type="text" class="form-control" placeholder="Termine Suchen..." v-model="filterQuery" />
+        </div>
+        <div class="m-2" v-for="group of groups" :key="group.id">
+          <input class="form-check-input" type="checkbox" v-model="group.checked" />
+          <label class="form-check-label ms-3" for="flexCheckDefault"> {{ group.name }}</label>
+        </div>
       </div>
       <div class="d-flex flex-column flex-grow-1" v-if="mode == 'week' || mode == 'day'">
         <!-- date header -->
@@ -58,12 +66,14 @@
               <div v-for="num of 23" class="timeaxis" :key="num">{{ ("0" + num).slice(-2) }}:00</div>
             </div>
 
-            <div v-for="date of currentWeek" :key="date.toISODate()" class="w-100 day-background"></div>
+            <div v-for="date of currentWeek" :key="date.toISODate()" class="w-100 day-background position-relative">
+              <DayEvents :events="getEventsForDay(date)"></DayEvents>
+            </div>
           </div>
         </div>
       </div>
       <div class="d-flex flex-column flex-grow-1" v-else-if="mode == 'month'">
-        <MonthView :month="currentMonth" :big="true"> </MonthView>
+        <MonthView :month="currentMonth" :big="true" :events="getEventsForMonth(currentMonth)"> </MonthView>
       </div>
       <div class="d-flex flex-column flex-grow-1" v-else-if="mode == 'year'">
         <div class="overflow-auto" style="height: 0; flex: 1 1 auto; align-items: stretch">
@@ -74,6 +84,7 @@
                 v-for="month in 12"
                 :key="month"
                 :month="currentYear.plus({ month: month - 1 })"
+                :events="getEventsForMonth(currentYear.plus({ month: month - 1 }))"
               >
               </MonthView>
             </div>
@@ -91,17 +102,18 @@ import { DateTime } from "luxon";
 import { computed, defineProps, ref, toRefs } from "vue";
 import ButtonGroup from "./ButtonGroup.vue";
 import MonthView from "./MonthView.vue";
+import DayEvents from "./DayEvents.vue";
 
 const isMobile = window.innerWidth < 576;
 
-const mode = ref<"week" | "day" | "month" | "year" | "agenda">(isMobile ? "day" : "month");
+const mode = ref<"week" | "day" | "month" | "year" | "agenda">(isMobile ? "day" : "week" /*FIXME:dev override*/);
 const timeFrame = computed(() => (mode.value == "agenda" ? "day" : mode.value));
 
 const currentDay = ref(DateTime.now());
 
 const getDayClasses = (date: DateTime, type: "num" | "day") => {
   return {
-    "is-weekend": date.weekday == 1 || date.weekday == 7,
+    "is-weekend": date.weekday == 6 || date.weekday == 7,
     "is-today": date.startOf("day").equals(DateTime.now().startOf("day")) && type == "num",
     "is-current": date.startOf("day").equals(currentDay.value.startOf("day")) && type == "num",
   };
@@ -119,6 +131,44 @@ const currentYear = computed(() => currentDay.value.startOf("year"));
 const currentDayReadable = computed(() =>
   currentDay.value.toFormat({ day: "dd. LLLL, yyyy", week: "LLLL, yyyy", month: "LLLL, yyyy", year: "yyyy" }[timeFrame.value])
 );
+const events = [
+  { start: "2022-02-18T07:00", end: "2022-02-18T09:00", name: "fsdkjhfs", id: 1, color: "red", group_id: 1 },
+  { start: "2022-02-18T07:00", end: "2022-02-18T08:00", name: "fsdkjhfs", id: 1, color: "green", group_id: 2 },
+  { start: "2022-02-18T08:30", end: "2022-02-18T10:30", name: "udkauhd", id: 2, color: "blue", group_id: 2 },
+  { start: "2022-02-18T10:30", end: "2022-02-18T11:30", name: "jfd", id: 3, color: "yellow", group_id: 1 },
+  { start: "2022-02-18T09:45", end: "2022-02-18T10:30", name: "jfd", id: 3, color: "purple", group_id: 4 },
+  { start: "2022-02-19T09:45", end: "2022-02-19T11:30", name: "jfd", id: 3, color: "orange", group_id: 2 },
+  { start: "2022-02-19T05:45", end: "2022-02-19T18:30", name: "jfd", id: 3, color: "black", group_id: 1 },
+  { start: "2022-02-19T13:00", end: "2022-02-19T14:00", name: "jfd", id: 3, color: "orange", group_id: 2 },
+  { start: "2022-02-19T13:00", end: "2022-02-19T14:00", name: "jfd", id: 3, color: "orange", group_id: 3 },
+  { start: "2022-02-20T13:00", end: "2022-02-20T14:00", name: "jfd", id: 3, color: "orange", group_id: 2 },
+  { start: "2022-02-20T13:00", end: "2022-02-20T14:00", name: "jfd", id: 3, color: "orange", group_id: 3 },
+];
+
+const groups = ref([
+  { id: 1, name: "Group1", checked: true },
+  { id: 2, name: "Group2", checked: true },
+  { id: 3, name: "Group3", checked: true },
+  { id: 4, name: "Group4", checked: true },
+]);
+
+const filterQuery = ref("");
+
+const filteredEvents = computed(() =>
+  events.filter((e) => groups.value.filter((g) => g.checked).some((g) => g.id == e.group_id)).filter((e) => e.name.includes(filterQuery.value))
+);
+
+const getEventsForDay = (day: DateTime) =>
+  filteredEvents.value
+    .filter((e) => day.toFormat("yyyy-LL-dd") == e.start.split("T")[0])
+    .map((e) => ({
+      ...e,
+      start: e.start.split("T")[1],
+      end: e.end.split("T")[1],
+    }));
+
+const getEventsForMonth = (day: DateTime) =>
+  filteredEvents.value.filter((e) => day.startOf("month").equals(DateTime.fromFormat(e.start.split("T")[0], "yyyy-LL-dd").startOf("month")));
 
 const weekViewScrollbarSize = () => (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ? 1 : 17);
 </script>
@@ -137,9 +187,9 @@ const weekViewScrollbarSize = () => (/Android|webOS|iPhone|iPad|iPod|BlackBerry|
 div {
   --time-axis-width: 2.5em;
   --day-length: 24;
-  --day-height: 1008px;
-  --hour-height: 42px;
-  --half-hour-height: 20.5px;
+  --hour-height: 63px;
+  --half-hour-height: calc(var(--hour-height) / 2);
+  --day-height: calc(var(--hour-height) * 24);
   --day-start-offset: 0px;
 
   --dayview-border-color: #ddd;
