@@ -1,10 +1,20 @@
 <template>
   <div
+    v-if="isToday"
+    class="position-absolute bg-danger w-100"
+    style="height: 2px"
+    :style="{ top: `calc(${getHoursFraction(DateTime.now().toFormat('HH:mm'))} * 100%)` }"
+  >
+    <div class="bg-danger" style="height: 10px; width: 10px; border-radius: 50%; position: absolute; margin-top: -4px; margin-left: -5px"></div>
+  </div>
+  <div
     v-for="event in layoutedEvents"
     :key="JSON.stringify(event)"
-    class="alert alert-primary p-0 border-0 rounded-0 eventCard"
+    style="cursor: pointer"
+    class="alert alert-primary p-0 border-0 rounded-0 eventCard overflow-hidden"
     :style="getEventStyle(event)"
     draggable="true"
+    @click.stop="emit('eventClicked', event)"
   >
     <div class="eventCardContent">
       <div class="ps-2">{{ event.name }}</div>
@@ -12,30 +22,22 @@
   </div>
 </template>
 
-<script lang="ts">
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-//@ts-ignore
-type Event = {
-  start: string;
-  end: string;
-  name: string;
-  id: number;
-  color: string;
-};
-
-type Layout = {
-  groupSize: number;
-  groupIndex: number;
-};
-</script>
-
 <script lang="ts" setup>
-import { computed, defineProps, toRefs } from "vue";
+import { DateTime } from "luxon";
+import { computed, defineProps, toRefs, defineEmits } from "vue";
+import type { Event } from "./Calendar.vue";
 
 const props = defineProps<{
   events: Event[];
+  start: number;
+  end: number;
+  isToday?: boolean;
 }>();
-const { events } = toRefs(props);
+const { events, start, end, isToday } = toRefs(props);
+
+const emit = defineEmits<{
+  (e: "eventClicked", value: Event): void;
+}>();
 
 const layoutedEvents = computed(() => {
   function collidesWith(a: Event, b: Event) {
@@ -70,19 +72,24 @@ const layoutedEvents = computed(() => {
   });
 });
 
-function getHours(time: string) {
-  return parseInt(time.split(":")[0]) + parseInt(time.split(":")[1]) / 60;
+function getHoursFraction(time: string) {
+  return (parseInt(time.split(":")[0]) + parseInt(time.split(":")[1]) / 60 - start.value) / (end.value - start.value);
 }
 
-function getEventStyle(event: Event & Layout) {
-  let start = getHours(event.start);
-  let end = getHours(event.end);
+function getEventStyle(
+  event: Event & {
+    groupSize: number;
+    groupIndex: number;
+  }
+) {
+  let start = getHoursFraction(event.start);
+  let end = getHoursFraction(event.end);
 
   return {
-    top: `calc(${start} / 24 * 100%)`,
-    left: `calc(calc(100% - 5px) / ${event.groupSize / event.groupIndex})`,
-    width: `calc(calc(100% - 5px) / ${event.groupSize})`,
-    height: `calc(${end - start} / 24 * 100%)`,
+    top: `calc(${start} * 100%)`,
+    left: `calc(calc(100% - 10px) / ${event.groupSize / event.groupIndex})`,
+    width: `calc(calc(100% - 10px) / ${event.groupSize})`,
+    height: `calc(${end - start} * 100%)`,
     position: "absolute",
     fontSize: "10px",
     backgroundColor: event.color,

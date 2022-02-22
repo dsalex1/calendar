@@ -1,5 +1,5 @@
 <template>
-  <div class="h-100 d-flex flex-column">
+  <div class="h-100 d-flex flex-column flex-grow-1 overflow-hidden">
     <!-- menu bar -->
     <div class="bg-light d-flex justify-content-between text-center p-2 border-bottom flex-wrap pb-0">
       <div class="d-flex mb-2">
@@ -31,6 +31,10 @@
       <!-- side controls -->
       <div class="bg-light collapse hide" :class="{ show: !isMobile }" id="sideControls">
         <MonthView
+          @event-clicked="emit('eventClicked', $event)"
+          @day-pressed="(currentDay = $event), (mode = 'day')"
+          @week-pressed="(currentDay = $event), (mode = 'week')"
+          @month-pressed="(currentDay = currentMonth), (mode = 'month')"
           :month="currentMonth"
           controllable
           @previous="currentDay = currentDay.plus({ month: -1 })"
@@ -41,8 +45,13 @@
         <div class="m-2">
           <input type="text" class="form-control" placeholder="Termine Suchen..." v-model="filterQuery" />
         </div>
-        <div class="m-2" v-for="group of groups" :key="group.id">
-          <input class="form-check-input" type="checkbox" v-model="group.checked" />
+        <div class="p-1 ps-2" v-for="(group, index) of groups" :key="group.id" @click="group.checked = !group.checked">
+          <input
+            class="form-check-input"
+            type="checkbox"
+            v-model="group.checked"
+            :style="{ backgroundColor: groupColors[index], borderColor: 'grey' }"
+          />
           <label class="form-check-label ms-3" for="flexCheckDefault"> {{ group.name }}</label>
         </div>
       </div>
@@ -54,7 +63,13 @@
             style="flex: 0 0 auto; padding-left: var(--time-axis-width)"
             :style="{ 'padding-right': weekViewScrollbarSize() + 'px' }"
           >
-            <div v-for="date of currentWeek" :key="date.toISODate()" style="width: 0px" class="d-flex flex-grow-1 flex-column align-items-center">
+            <div
+              v-for="date of currentWeek"
+              :key="date.toISODate()"
+              style="width: 0px; cursor: pointer"
+              class="d-flex flex-grow-1 flex-column align-items-center"
+              @click="(currentDay = date), (mode = 'day')"
+            >
               <div class="text-muted mt-2" style="font-size: 14px" :class="getDayClasses(date, 'day')">{{ date.weekdayShort }}</div>
               <div class="h5 d-sm-none d-block fw-bold p-1 rounded-circle" :class="getDayClasses(date, 'num')">{{ date.day }}</div>
               <div class="h2 d-none d-sm-block fw-normal p-2 rounded-circle" :class="getDayClasses(date, 'num')">{{ date.day }}</div>
@@ -62,51 +77,130 @@
           </div>
           <!-- date content -->
           <div class="overflow-auto d-flex flex-row" id="weekContainer" style="height: 0; flex: 1 1 auto; align-items: stretch">
-            <div class="timeaxis-container">
-              <div v-for="num of 23" class="timeaxis" :key="num">{{ ("0" + num).slice(-2) }}:00</div>
+            <div class="timeaxis-container" :style="{ '--num-of-hours': displayHours[1] - displayHours[0] }">
+              <div v-for="num of displayHours[1] - displayHours[0] - 1" class="timeaxis" :key="num">
+                {{ ("0" + (num + displayHours[0])).slice(-2) }}:00
+              </div>
             </div>
 
-            <div v-for="date of currentWeek" :key="date.toISODate()" class="w-100 day-background position-relative">
-              <DayEvents :events="getEventsForDay(date)"></DayEvents>
+            <div
+              v-for="date of currentWeek"
+              :style="{ '--num-of-hours': displayHours[1] - displayHours[0] }"
+              :key="date.toISODate()"
+              class="w-100 day-background position-relative overflow-hidden"
+              @click="emit('timeClicked', date.plus({hours:Math.round(($event.offsetY/($event.target as any).offsetHeight*(displayHours[1] - displayHours[0])+displayHours[0])*4)/4}))"
+            >
+              <DayEvents
+                @event-clicked="emit('eventClicked', $event)"
+                :start="displayHours[0]"
+                :end="displayHours[1]"
+                :events="getEventsForDay(date)"
+                :isToday="DateTime.now().startOf('day').equals(date)"
+              ></DayEvents>
             </div>
           </div>
         </div>
       </div>
       <div class="d-flex flex-column flex-grow-1" v-else-if="mode == 'month'">
-        <MonthView :month="currentMonth" :big="true" :events="getEventsForMonth(currentMonth)"> </MonthView>
+        <MonthView
+          @event-clicked="emit('eventClicked', $event)"
+          @day-pressed="(currentDay = $event), (mode = 'day')"
+          @week-pressed="(currentDay = $event), (mode = 'week')"
+          @month-pressed="(currentDay = currentMonth), (mode = 'month')"
+          :month="currentMonth"
+          :big="true"
+          :events="getEventsForMonth(currentMonth)"
+        >
+        </MonthView>
       </div>
       <div class="d-flex flex-column flex-grow-1" v-else-if="mode == 'year'">
         <div class="overflow-auto" style="height: 0; flex: 1 1 auto; align-items: stretch">
-          <div>
-            <div class="row mx-0">
-              <MonthView
-                class="col-12 col-md-6 col-lg-4 col-xxl-3 gy-5"
-                v-for="month in 12"
-                :key="month"
-                :month="currentYear.plus({ month: month - 1 })"
-                :events="getEventsForMonth(currentYear.plus({ month: month - 1 }))"
-              >
-              </MonthView>
-            </div>
+          <div class="row mx-0" style="margin-top: -1.5rem">
+            <MonthView
+              @event-clicked="emit('eventClicked', $event)"
+              @day-pressed="(currentDay = $event), (mode = 'day')"
+              @week-pressed="(currentDay = $event), (mode = 'week')"
+              @month-pressed="(currentDay = currentYear.plus({ month: month - 1 })), (mode = 'month')"
+              class="col-12 col-md-6 col-lg-4 col-xxl-3 gy-4"
+              v-for="month in 12"
+              :key="month"
+              :month="currentYear.plus({ month: month - 1 })"
+              :events="getEventsForMonth(currentYear.plus({ month: month - 1 }))"
+            >
+            </MonthView>
           </div>
         </div>
       </div>
-      <div class="d-flex flex-column flex-grow-1" v-else-if="mode == 'agenda'">agenda</div>
+      <div class="d-flex flex-column flex-grow-1" v-else-if="mode == 'agenda'">
+        <EventAgenda
+          @event-clicked="emit('eventClicked', $event)"
+          @day-pressed="(currentDay = $event), (mode = 'day')"
+          :events="getFutureEvents(currentDay).slice(0, 25)"
+        />
+      </div>
     </div>
   </div>
 </template>
 
+<script lang="ts">
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+//@ts-ignore
+export type Event = {
+  start: string;
+  end: string;
+  name: string;
+  id: number;
+  color?: string;
+  group_id: number;
+};
+
+export type Group = {
+  name: string;
+  id: number;
+  checked: boolean;
+  color?: string;
+};
+
+export type Layout = {
+  groupSize: number;
+  groupIndex: number;
+};
+
+import { defineComponent } from "vue";
+export default defineComponent({
+  name: "Calendar",
+});
+</script>
+
 <script lang="ts" setup>
 import { DateTime } from "luxon";
 
-import { computed, defineProps, ref, toRefs } from "vue";
+import { computed, defineProps, ref, toRefs, defineEmits } from "vue";
 import ButtonGroup from "./ButtonGroup.vue";
 import MonthView from "./MonthView.vue";
 import DayEvents from "./DayEvents.vue";
+import EventAgenda from "./EventAgenda.vue";
+function log(a: any) {
+  console.log(a);
+}
+const props = defineProps<{
+  displayHours: [number, number];
+  groups: Group[];
+  events: Event[];
+}>();
+const { events, groups: groupsProp, displayHours } = toRefs(props);
+
+const emit = defineEmits<{
+  (e: "update:groups", value: Group[]): void;
+  (e: "eventClicked", value: Event): void;
+  (e: "timeClicked", value: DateTime): void;
+}>();
+
+let groups = computed({ get: () => groupsProp.value, set: (groups: Group[]) => emit("update:groups", groups) });
 
 const isMobile = window.innerWidth < 576;
 
-const mode = ref<"week" | "day" | "month" | "year" | "agenda">(isMobile ? "day" : "week" /*FIXME:dev override*/);
+const mode = ref<"week" | "day" | "month" | "year" | "agenda">(isMobile ? "day" : "month");
 const timeFrame = computed(() => (mode.value == "agenda" ? "day" : mode.value));
 
 const currentDay = ref(DateTime.now());
@@ -131,31 +225,33 @@ const currentYear = computed(() => currentDay.value.startOf("year"));
 const currentDayReadable = computed(() =>
   currentDay.value.toFormat({ day: "dd. LLLL, yyyy", week: "LLLL, yyyy", month: "LLLL, yyyy", year: "yyyy" }[timeFrame.value])
 );
-const events = [
-  { start: "2022-02-18T07:00", end: "2022-02-18T09:00", name: "fsdkjhfs", id: 1, color: "red", group_id: 1 },
-  { start: "2022-02-18T07:00", end: "2022-02-18T08:00", name: "fsdkjhfs", id: 1, color: "green", group_id: 2 },
-  { start: "2022-02-18T08:30", end: "2022-02-18T10:30", name: "udkauhd", id: 2, color: "blue", group_id: 2 },
-  { start: "2022-02-18T10:30", end: "2022-02-18T11:30", name: "jfd", id: 3, color: "yellow", group_id: 1 },
-  { start: "2022-02-18T09:45", end: "2022-02-18T10:30", name: "jfd", id: 3, color: "purple", group_id: 4 },
-  { start: "2022-02-19T09:45", end: "2022-02-19T11:30", name: "jfd", id: 3, color: "orange", group_id: 2 },
-  { start: "2022-02-19T05:45", end: "2022-02-19T18:30", name: "jfd", id: 3, color: "black", group_id: 1 },
-  { start: "2022-02-19T13:00", end: "2022-02-19T14:00", name: "jfd", id: 3, color: "orange", group_id: 2 },
-  { start: "2022-02-19T13:00", end: "2022-02-19T14:00", name: "jfd", id: 3, color: "orange", group_id: 3 },
-  { start: "2022-02-20T13:00", end: "2022-02-20T14:00", name: "jfd", id: 3, color: "orange", group_id: 2 },
-  { start: "2022-02-20T13:00", end: "2022-02-20T14:00", name: "jfd", id: 3, color: "orange", group_id: 3 },
-];
 
-const groups = ref([
-  { id: 1, name: "Group1", checked: true },
-  { id: 2, name: "Group2", checked: true },
-  { id: 3, name: "Group3", checked: true },
-  { id: 4, name: "Group4", checked: true },
-]);
+const groupColors = computed(() => {
+  const genRndColor = (i: number) =>
+    [50, 25, 80].flatMap((l) => [
+      `hsl(0, 100%, ${l}%)`,
+      `hsl(127, 80%, ${l}%)`,
+      `hsl(241, 100%, ${l}%)`,
+      `hsl(35, 100%, ${l}%)`,
+      `hsl(181, 100%, ${l}%)`,
+      `hsl(300, 100%, ${l}%)`,
+      `hsl(58, 80%, ${l}%)`,
+    ])[i] || "#" + ("000000" + Math.floor((Math.sin(i - 20) * 10000 - Math.floor(Math.sin(i - 20) * 10000)) * 0xffffff).toString(16)).slice(-6);
+
+  let rndColorIndex = 0;
+  return groups.value.map((g) => g.color || genRndColor(rndColorIndex++));
+});
+
+const eventsWithColor = computed(() =>
+  events.value.map((e) => ({ ...e, color: e.color || groupColors.value[groups.value.findIndex((g) => g.id == e.group_id)] }))
+);
 
 const filterQuery = ref("");
 
 const filteredEvents = computed(() =>
-  events.filter((e) => groups.value.filter((g) => g.checked).some((g) => g.id == e.group_id)).filter((e) => e.name.includes(filterQuery.value))
+  eventsWithColor.value
+    .filter((e) => groups.value.filter((g) => g.checked).some((g) => g.id == e.group_id))
+    .filter((e) => e.name.includes(filterQuery.value))
 );
 
 const getEventsForDay = (day: DateTime) =>
@@ -166,6 +262,9 @@ const getEventsForDay = (day: DateTime) =>
       start: e.start.split("T")[1],
       end: e.end.split("T")[1],
     }));
+
+const getFutureEvents = (day: DateTime) =>
+  filteredEvents.value.filter((e) => day.startOf("day") <= DateTime.fromFormat(e.start.split("T")[0], "yyyy-LL-dd").startOf("day"));
 
 const getEventsForMonth = (day: DateTime) =>
   filteredEvents.value.filter((e) => day.startOf("month").equals(DateTime.fromFormat(e.start.split("T")[0], "yyyy-LL-dd").startOf("month")));
@@ -189,7 +288,6 @@ div {
   --day-length: 24;
   --hour-height: 63px;
   --half-hour-height: calc(var(--hour-height) / 2);
-  --day-height: calc(var(--hour-height) * 24);
   --day-start-offset: 0px;
 
   --dayview-border-color: #ddd;
@@ -197,7 +295,7 @@ div {
   --dayview-half-hour-line-color: #f0f0f0;
 }
 .day-background {
-  height: var(--day-height);
+  height: calc(var(--hour-height) * var(--num-of-hours));
   border-left: 1px solid #ddd;
   background-image: linear-gradient(
     to bottom,
@@ -221,7 +319,7 @@ div {
   white-space: nowrap;
 }
 .timeaxis-container {
-  height: var(--day-height);
+  height: calc(var(--hour-height) * var(--num-of-hours));
   display: flex;
   flex-flow: column nowrap;
   overflow: hidden;
